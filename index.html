@@ -238,6 +238,8 @@ function offsetFromDate(d){return daysBetween(BASE_DATE,d);}
 
 var viewMode='month';
 var viewStartDate=new Date(todayDate.getFullYear(),todayDate.getMonth(),1);
+var currentYear=todayDate.getFullYear();
+var currentMonth=todayDate.getMonth();
 var saveTimer=null;
 var rowDragActive=false,rowDragProj=null,rowFloatEl=null;
 
@@ -297,16 +299,10 @@ document.getElementById('today-btn').addEventListener('click',function(e){
     viewStartDate=new Date(y,mo,1,0,0,0,0);
     currentYear=y;currentMonth=mo;
     sbDrag=false;closePanel();
+    // 今日が左から2列目になるよう昨日を起点に
+    viewStartDate=new Date(y,mo,d-1,0,0,0,0);
     document.getElementById('grid-wrapper').scrollLeft=0;
     renderAll();
-    // 今日を左から2列目に同期スクロール
-    (function(){
-      var wrapper=document.getElementById('grid-wrapper');
-      var h=wrapper.querySelectorAll('th.day-header');
-      var cw=h.length?h[0].offsetWidth:130;
-      if(cw<5)cw=Math.floor((wrapper.clientWidth-130)/getVisibleDays());
-      wrapper.scrollLeft=Math.max(0,(d-2)*cw);
-    })();
   }else{
     viewStartDate=new Date(y,mo,d,0,0,0,0);
     currentYear=y;currentMonth=mo;
@@ -906,6 +902,11 @@ document.addEventListener('pointerup',function(e){
   }
 });
 function renderMonthLabel(){
+  if(viewMode==='month'){
+    // 月表示はcurrentYear/currentMonthを使う（viewStartDateが昨日でもラベルは今月）
+    document.getElementById('month-label').textContent=currentYear+'年'+(currentMonth+1)+'月';
+    return;
+  }
   var dayList=getDayList();
   var first=dayList[0],last=dayList[dayList.length-1];
   if(first.y===last.y&&first.m===last.m){
