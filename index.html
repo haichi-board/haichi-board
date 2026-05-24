@@ -34,7 +34,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .sync-dot.ok{background:#22c55e;}.sync-dot.err{background:#ef4444;}.sync-dot.saving{background:#F59E0B;}
 
 #grid-wrapper{overflow:auto;-webkit-overflow-scrolling:touch;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
-#grid-wrapper>table{transform-origin:0 0;transition:none;}
 #pinch-indicator{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);color:#fff;font-size:13px;padding:4px 14px;border-radius:20px;pointer-events:none;opacity:0;transition:opacity 0.4s;z-index:9999;}
 table{border-collapse:collapse;table-layout:fixed;}
 th{font-size:12px;font-weight:500;color:#555;padding:4px 2px;text-align:center;border:1px solid #9ca3af;background:#BAE6FD;vertical-align:middle;min-width:130px;}
@@ -52,7 +51,7 @@ th .month-mark{font-size:9px;color:#aaa;line-height:1;}
 
 /* PC でも横スクロール（チップの可読性優先） */
 
-td.name-cell{font-size:12px;font-weight:600;color:#222;padding:0;border:1px solid #9ca3af;background:#E0F2FE;position:sticky;left:0;z-index:1;width:130px;min-width:130px;max-width:130px;vertical-align:top;touch-action:auto;user-select:text;-webkit-user-select:text;}
+td.name-cell{font-size:12px;font-weight:600;color:#222;padding:0;border:1px solid #9ca3af;background:#E0F2FE;position:sticky;left:0;z-index:10;width:130px;min-width:130px;max-width:130px;vertical-align:top;touch-action:auto;user-select:text;-webkit-user-select:text;}
 td.name-cell.row-drag-over-top{border-top:3px solid #378ADD;}
 td.name-cell.row-drag-over-bottom{border-bottom:3px solid #378ADD;}
 td.name-cell.yasumi-name{background:#FEF9C3 !important;}
@@ -1144,14 +1143,15 @@ function renderAll(){
   renderGrid();
   requestAnimationFrame(updateScrollbar);
 }
-// ==== ピンチイン・アウト ====
+// ==== ピンチイン・アウト（zoom方式: sticky header維持）====
 (function(){
-  var wrapper = document.getElementById('grid-wrapper');
-  var table   = document.getElementById('grid');
+  var wrapper   = document.getElementById('grid-wrapper');
+  var table     = document.getElementById('grid');
   var indicator = document.getElementById('pinch-indicator');
   var MIN_SCALE = 0.4, MAX_SCALE = 2.0;
   var scale = 1.0;
   var startDist = 0, startScale = 1.0;
+  var startMidX = 0, startMidY = 0;
   var indicatorTimer = null;
 
   function getDistance(t){
@@ -1160,12 +1160,27 @@ function renderAll(){
     return Math.sqrt(dx*dx + dy*dy);
   }
 
-  function applyScale(s){
+  function getMid(t){
+    return {
+      x: (t[0].clientX + t[1].clientX) / 2,
+      y: (t[0].clientY + t[1].clientY) / 2
+    };
+  }
+
+  function applyScale(s, mid){
+    var prev = scale;
     scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
-    table.style.transform = 'scale(' + scale + ')';
-    // tableが縮んでもwrapperがスクロール範囲を保持するようにサイズ補正
-    table.style.marginBottom = (scale < 1 ? (scale - 1) * table.offsetHeight + 'px' : '0');
-    table.style.marginRight  = (scale < 1 ? (scale - 1) * table.offsetWidth  + 'px' : '0');
+    // zoom を使うと position:sticky が維持される
+    table.style.zoom = scale;
+    // ピンチ中心点を基準にスクロール位置を補正
+    if(mid && prev > 0){
+      var ratio = scale / prev;
+      var rect  = wrapper.getBoundingClientRect();
+      var ox = mid.x - rect.left + wrapper.scrollLeft;
+      var oy = mid.y - rect.top  + wrapper.scrollTop;
+      wrapper.scrollLeft = ox * ratio - (mid.x - rect.left);
+      wrapper.scrollTop  = oy * ratio - (mid.y - rect.top);
+    }
   }
 
   function showIndicator(){
@@ -1180,6 +1195,8 @@ function renderAll(){
       e.preventDefault();
       startDist  = getDistance(e.touches);
       startScale = scale;
+      var m = getMid(e.touches);
+      startMidX = m.x; startMidY = m.y;
     }
   }, {passive: false});
 
@@ -1187,7 +1204,8 @@ function renderAll(){
     if(e.touches.length === 2){
       e.preventDefault();
       var dist = getDistance(e.touches);
-      applyScale(startScale * (dist / startDist));
+      var mid  = getMid(e.touches);
+      applyScale(startScale * (dist / startDist), mid);
       showIndicator();
     }
   }, {passive: false});
@@ -1202,7 +1220,8 @@ function renderAll(){
     if(e.touches.length > 0) return;
     var now = Date.now();
     if(now - lastTap < 300){
-      applyScale(1.0);
+      var rect = wrapper.getBoundingClientRect();
+      applyScale(1.0, {x: rect.left + rect.width/2, y: rect.top + rect.height/2});
       showIndicator();
     }
     lastTap = now;
