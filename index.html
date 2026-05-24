@@ -34,7 +34,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .sync-dot.ok{background:#22c55e;}.sync-dot.err{background:#ef4444;}.sync-dot.saving{background:#F59E0B;}
 
 #grid-wrapper{overflow:auto;-webkit-overflow-scrolling:touch;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
-#pinch-indicator{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);color:#fff;font-size:13px;padding:4px 14px;border-radius:20px;pointer-events:none;opacity:0;transition:opacity 0.4s;z-index:9999;}
 table{border-collapse:collapse;table-layout:fixed;}
 th{font-size:12px;font-weight:500;color:#555;padding:4px 2px;text-align:center;border:1px solid #9ca3af;background:#BAE6FD;vertical-align:middle;min-width:130px;}
 th.col-name{position:sticky;left:0;z-index:3;text-align:left;padding-left:6px;width:130px;min-width:130px;background:#BAE6FD;}
@@ -173,6 +172,11 @@ td.day-cell.delete-target{background:#FEE2E2 !important;outline:2px solid #E24B4
 #settings-close{font-size:20px;color:#aaa;background:none;border:none;cursor:pointer;line-height:1;}
 #settings-body{padding:12px 16px 20px;display:flex;flex-direction:column;gap:16px;}
 .settings-sec-title{font-size:12px;font-weight:700;color:#888;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #f0f0f0;}
+.settings-group-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#EFF6FF;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:#1e40af;border:1px solid #BAE6FD;margin-bottom:4px;user-select:none;-webkit-user-select:none;}
+.settings-group-header .arrow{font-size:11px;transition:transform 0.2s;}
+.settings-group-body{padding:0 4px;overflow:hidden;}
+.settings-group-body.collapsed{display:none;}
+.settings-sub-title{font-size:11px;font-weight:700;color:#888;margin:8px 0 4px;padding-bottom:3px;border-bottom:1px solid #f0f0f0;}
 .settings-list{display:flex;flex-direction:column;gap:4px;}
 .settings-item{display:flex;align-items:center;gap:6px;padding:7px 8px;background:#f9fafb;border-radius:8px;}
 .settings-item-color{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
@@ -184,6 +188,8 @@ td.day-cell.delete-target{background:#FEE2E2 !important;outline:2px solid #E24B4
 .add-item-input{flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:8px;font-size:12px;outline:none;user-select:text;-webkit-user-select:text;}
 .add-item-input:focus{border-color:#378ADD;}
 .add-item-submit{padding:7px 14px;background:#378ADD;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;}
+.add-memo-input{width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:8px;font-size:11px;outline:none;margin-top:5px;box-sizing:border-box;user-select:text;-webkit-user-select:text;}
+.add-memo-input:focus{border-color:#378ADD;}
 
 </style>
 </head>
@@ -214,6 +220,25 @@ td.day-cell.delete-target{background:#FEE2E2 !important;outline:2px solid #E24B4
   <div id="grid-wrapper"><table id="grid"></table></div>
 <div id="pinch-indicator">100%</div>
   <!-- メモ入力ポップアップ -->
+  <!-- 案件編集ポップアップ -->
+  <div class="memo-popup-overlay" id="proj-edit-overlay">
+    <div class="memo-popup">
+      <div class="memo-popup-title" id="proj-edit-title">案件変更</div>
+      <div style="margin-top:10px;">
+        <div style="font-size:11px;color:#888;margin-bottom:4px;">案件名</div>
+        <input id="proj-edit-name" type="text" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;outline:none;user-select:text;-webkit-user-select:text;" />
+      </div>
+      <div style="margin-top:10px;">
+        <div style="font-size:11px;color:#888;margin-bottom:4px;">メモ（10文字まで）</div>
+        <input id="proj-edit-memo" type="text" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;outline:none;user-select:text;-webkit-user-select:text;" placeholder="省略可" />
+        <div id="proj-edit-memo-count" style="font-size:11px;color:#aaa;text-align:right;margin-top:3px;">0／10</div>
+      </div>
+      <div class="memo-popup-btns" style="margin-top:14px;">
+        <button class="memo-popup-cancel" id="proj-edit-cancel">キャンセル</button>
+        <button class="memo-popup-ok" id="proj-edit-ok">保存</button>
+      </div>
+    </div>
+  </div>
   <div class="memo-popup-overlay" id="memo-overlay">
     <div class="memo-popup">
       <div class="memo-popup-title" id="memo-popup-title">メモ</div>
@@ -253,12 +278,13 @@ var EMP_COLOR='#378ADD',SUB_COLOR='#888780';
 var YASUMI_ROW='休み';
 var API_KEY='$2a$10$NKRfuyRjMWLW2IXW0UpxG.Lk.kj4we/S4sMUgQo7O0h4AbLL4qm6K';
 var BIN_ID='6a0a6a8d250b1311c366d120';
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 var state={
   employees:['田中','鈴木','佐藤','高橋','渡辺','伊藤'],
   subcontractors:['協力会社A','協力会社B'],
-  projects:[{name:'休み',memo:''},{name:'案件A',memo:''},{name:'案件B',memo:''},{name:'案件C',memo:''},{name:'案件D',memo:''}],
+  projects:[{name:'休み',memo:'',id:genId()},{name:'案件A',memo:'',id:genId()},{name:'案件B',memo:'',id:genId()},{name:'案件C',memo:'',id:genId()},{name:'案件D',memo:'',id:genId()}],
   assignments:{},holidayDays:[],
-  colors:{}
+  colors:{},projColors:{}
 };
 
 var todayDate=new Date();
@@ -437,7 +463,8 @@ function loadFromBin(){
   if(!API_KEY||!BIN_ID)return;
   fetch('https://api.jsonbin.io/v3/b/'+BIN_ID+'/latest',{headers:{'X-Master-Key':API_KEY}})
   .then(function(r){return r.json();}).then(function(d){
-    if(d.record){state=d.record;if(!state.assignments)state.assignments={};if(!state.holidayDays)state.holidayDays=[];if(!state.colors)state.colors={};}
+    if(d.record){state=d.record;if(!state.assignments)state.assignments={};if(!state.holidayDays)state.holidayDays=[];if(!state.colors)state.colors={};if(!state.projColors)state.projColors={};
+      (state.projects||[]).forEach(function(p){if(!p.id)p.id=genId();});}
     setSyncStatus('ok','同期済み');renderAll();
   }).catch(function(){setSyncStatus('err','読込エラー');renderAll();});
 }
@@ -570,8 +597,27 @@ function closeSettings(){
 }
 function renderSettings(){
   var body=document.getElementById('settings-body');body.innerHTML='';
-  body.appendChild(makeSettingsSec('👷 社員',state.employees,'emp'));
-  body.appendChild(makeSettingsSec('🔧 協力会社',state.subcontractors,'sub'));
+  // 氏名編集グループ（社員＋協力会社）
+  var grp=document.createElement('div');
+  var grpHead=document.createElement('div');grpHead.className='settings-group-header';
+  var grpLabel=document.createElement('span');grpLabel.textContent='👤 氏名編集';
+  var grpArrow=document.createElement('span');grpArrow.className='arrow';grpArrow.textContent='▼';
+  grpHead.appendChild(grpLabel);grpHead.appendChild(grpArrow);
+  var grpBody=document.createElement('div');grpBody.className='settings-group-body collapsed';
+  grpHead.addEventListener('click',function(){
+    var open=!grpBody.classList.contains('collapsed');
+    grpBody.classList.toggle('collapsed',open);
+    grpArrow.style.transform=open?'':'rotate(180deg)';
+  });
+  // 社員サブセクション
+  var empTitle=document.createElement('div');empTitle.className='settings-sub-title';empTitle.textContent='👷 社員';
+  grpBody.appendChild(empTitle);
+  grpBody.appendChild(makeSettingsSec('','emp' ,state.employees,'emp'));
+  // 協力会社サブセクション
+  var subTitle=document.createElement('div');subTitle.className='settings-sub-title';subTitle.textContent='🔧 協抜会社';
+  grpBody.appendChild(subTitle);
+  grpBody.appendChild(makeSettingsSec('','sub',state.subcontractors,'sub'));
+  grp.appendChild(grpHead);grp.appendChild(grpBody);body.appendChild(grp);
   var sec=document.createElement('div');
   var title=document.createElement('div');title.className='settings-sec-title';title.textContent='🏗️ 案件';sec.appendChild(title);
   var list=document.createElement('div');list.className='settings-list';list.style.touchAction='pan-y';
@@ -618,44 +664,53 @@ function renderSettings(){
         }
         dragFloatEl2.remove();dragFloatEl2=null;dragSrcIdx=null;
       });
+      var projDot=document.createElement('div');
+      var projDotColor=(state.projColors&&proj.id&&state.projColors[proj.id])||'#E0F2FE';
+      projDot.style.cssText='width:22px;height:22px;border-radius:50%;flex-shrink:0;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px #ddd;background:'+projDotColor+';';
+      projDot.title='色を変更';
+      (function(pid,dot){
+        dot.addEventListener('click',function(e){
+          e.stopPropagation();
+          openColorPalette(dot,pid,function(c){
+            if(!state.projColors)state.projColors={};
+            state.projColors[pid]=c;
+            dot.style.background=c;
+            saveToBin();renderAll();
+          },PROJ_PALETTE);
+        });
+      })(proj.id,projDot);
       var nm=document.createElement('span');nm.className='settings-item-name';nm.textContent=proj.name;
       var rb=document.createElement('button');rb.className='s-btn';rb.textContent='変更';
       rb.onclick=(function(capturedIdx){
         return function(){
           var currentProj=state.projects[capturedIdx];
           if(!currentProj)return;
-          var n=window.prompt('案件名を変更',currentProj.name);
-          if(!n||!n.trim())return;
-          n=n.trim();
-          if(n===currentProj.name)return;
-          var oldName=currentProj.name;
-          var na={};
-          Object.keys(state.assignments).forEach(function(k){
-            na[k.indexOf(oldName+'__')===0?n+'__'+k.slice(oldName.length+2):k]=state.assignments[k];
+          openProjEditPopup(currentProj,function(){
+            saveToBin();renderAll();rebuildProj();
           });
-          state.assignments=na;
-          currentProj.name=n;
-          saveToBin();renderAll();rebuildProj();
         };
       })(idx);
       var db=document.createElement('button');db.className='s-btn danger';db.textContent='削除';
       db.onclick=function(){if(!confirm(proj.name+'を削除しますか？'))return;state.projects=state.projects.filter(function(p){return p.name!==proj.name;});saveToBin();renderAll();rebuildProj();};
-      item.appendChild(handle);item.appendChild(nm);item.appendChild(rb);item.appendChild(db);list.appendChild(item);
+      item.appendChild(handle);item.appendChild(projDot);item.appendChild(nm);item.appendChild(rb);item.appendChild(db);list.appendChild(item);
     });
   }
   rebuildProj();
   sec.appendChild(list);
-  var ar=document.createElement('div');ar.className='add-item-row';
+  var ar=document.createElement('div');ar.style.cssText='margin-top:8px;';
+  var ar1=document.createElement('div');ar1.className='add-item-row';
   var ai=document.createElement('input');ai.className='add-item-input';ai.placeholder='案件名を入力';
   var ab=document.createElement('button');ab.className='add-item-submit';ab.textContent='追加';
-  ab.onclick=function(){var n=ai.value.trim();if(!n||(state.projects||[]).find(function(p){return p.name===n;}))return;state.projects.push({name:n,memo:''});ai.value='';saveToBin();renderAll();renderSettings();};
+  var am=document.createElement('input');am.className='add-memo-input';am.placeholder='メモ（10文字まで）・省略可';
+  var comp_am=false;am.addEventListener('compositionstart',function(){comp_am=true;});am.addEventListener('compositionend',function(){comp_am=false;if(Array.from(am.value).length>10)am.value=Array.from(am.value).slice(0,10).join('');});am.addEventListener('input',function(){if(!comp_am&&Array.from(am.value).length>10)am.value=Array.from(am.value).slice(0,10).join('');});
+  ab.onclick=function(){var n=ai.value.trim();if(!n||(state.projects||[]).find(function(p){return p.name===n;}))return;var m=Array.from(am.value).slice(0,10).join('');state.projects.push({name:n,memo:m,id:genId()});ai.value='';am.value='';saveToBin();renderAll();renderSettings();};
   var comp_ai=false;ai.addEventListener('compositionstart',function(){comp_ai=true;});ai.addEventListener('compositionend',function(){comp_ai=false;});ai.onkeydown=function(e){if(e.key==='Enter'&&!comp_ai)ab.click();};;
-  ar.appendChild(ai);ar.appendChild(ab);sec.appendChild(ar);body.appendChild(sec);
+  ar1.appendChild(ai);ar1.appendChild(ab);ar.appendChild(ar1);ar.appendChild(am);sec.appendChild(ar);body.appendChild(sec);
 }
-function makeSettingsSec(title,list,type){
+function makeSettingsSec(label,key,list,type){
   var color=type==='emp'?EMP_COLOR:SUB_COLOR;
   var sec=document.createElement('div');
-  var t=document.createElement('div');t.className='settings-sec-title';t.textContent=title;sec.appendChild(t);
+  if(label){var t=document.createElement('div');t.className='settings-sec-title';t.textContent=label;sec.appendChild(t);}
   var listEl=document.createElement('div');listEl.className='settings-list';listEl.style.touchAction='pan-y';
 
   var dragSrcIdx=null,dragFloatEl=null;
@@ -688,7 +743,7 @@ function makeSettingsSec(title,list,type){
       dot.addEventListener('click',function(e){
         e.stopPropagation();
         openColorPalette(dot,name,function(c){
-          if(!state.colors)state.colors={};
+          if(!state.colors)state.colors={};if(!state.projColors)state.projColors={};
           state.colors[name]=c;
           dot.style.background=c;
           saveToBin();renderAll();
@@ -812,12 +867,18 @@ var PALETTE=[
   '#06B6D4','#EF4444','#8B5CF6','#10B981','#F59E0B',
   '#DC2626','#2563EB','#16A34A','#D97706','#7C3AED',
 ];
+var PROJ_PALETTE=[
+  '#E0F2FE','#DBEAFE','#EDE9FE','#FCE7F3','#D1FAE5',
+  '#FEF9C3','#FFEDD5','#FEE2E2','#F0FDF4','#F5F3FF',
+  '#CFFAFE','#E0E7FF','#FDF4FF','#ECFDF5','#FFF7ED',
+  '#F1F5F9','#FEF3C7','#DCFCE7','#FCE7F3','#E0F2FE',
+];
 var palettePopup=null;
-function openColorPalette(anchor,name,onSelect){
+function openColorPalette(anchor,name,onSelect,palette){
   if(palettePopup){palettePopup.remove();palettePopup=null;return;}
   var popup=document.createElement('div');
   popup.style.cssText='position:fixed;z-index:9999;background:#fff;border:1px solid #ddd;border-radius:10px;padding:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15);display:grid;grid-template-columns:repeat(5,32px);gap:6px;';
-  PALETTE.forEach(function(c){
+  (palette||PALETTE).forEach(function(c){
     var btn=document.createElement('div');
     btn.style.cssText='width:32px;height:32px;border-radius:50%;background:'+c+';cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px #ccc;transition:transform 0.1s;';
     btn.title=c;
@@ -981,6 +1042,13 @@ function renderGrid(){
     var tr=document.createElement('tr');tr.dataset.proj=proj.name;
     var nameTd=document.createElement('td');nameTd.className='name-cell';
     if(isYR)nameTd.classList.add('yasumi-name');
+    else if(state.projColors&&proj.id&&state.projColors[proj.id]){
+      var pc=state.projColors[proj.id];
+      nameTd.style.background=pc;
+      // 背景が暗い場合は文字を白に
+      nameTd.style.color='#222';
+      nameTd.dataset.bright='255';
+    }
     var top=document.createElement('div');top.className='name-cell-top';
     var handle=document.createElement('span');handle.className='row-handle';handle.textContent='☰';
     handle.addEventListener('pointerdown',function(e){startRowDrag(e,proj.name);});
@@ -995,6 +1063,7 @@ function renderGrid(){
     memoPreview.className='memo-preview'+(proj.memo?'':' empty');
     memoPreview.textContent=proj.memo||'メモ...';
     memoDiv.appendChild(memoPreview);
+    memoPreview.style.color=proj.memo?'#444':'#bbb';
     memoDiv.addEventListener('click',function(e){e.stopPropagation();openMemoPopup(proj,memoPreview);});
     nameTd.appendChild(memoDiv);tr.appendChild(nameTd);
 
@@ -1138,20 +1207,84 @@ function memoCharEnforce(){
   ta.addEventListener('blur',function(){memoCharEnforce();});
 })();
 // ==== ここまで ====
+// ==== 案件編集ポップアップ ====
+var projEditCallback=null;
+function openProjEditPopup(proj,cb){
+  projEditCallback=cb;
+  document.getElementById('proj-edit-name').value=proj.name||'';
+  var memo=proj.memo||'';
+  document.getElementById('proj-edit-memo').value=memo;
+  projEditMemoCount();
+  document.getElementById('proj-edit-overlay').classList.add('open');
+  // 保存ボタンのハンドラに現在のprojを紐付け
+  document.getElementById('proj-edit-ok')._proj=proj;
+  setTimeout(function(){document.getElementById('proj-edit-name').focus();},100);
+}
+function closeProjEditPopup(){
+  document.getElementById('proj-edit-overlay').classList.remove('open');
+  projEditCallback=null;
+}
+function projEditMemoCount(){
+  var val=document.getElementById('proj-edit-memo').value;
+  var ct=document.getElementById('proj-edit-memo-count');
+  var n=Array.from(val).length;
+  if(n>10){document.getElementById('proj-edit-memo').value=Array.from(val).slice(0,10).join('');n=10;}
+  ct.textContent=n+'／10';
+  ct.style.color=n>=10?'#E24B4A':'#aaa';
+}
+(function(){
+  // メモIME対応
+  var memoIn=document.getElementById('proj-edit-memo');
+  var comp=false;
+  memoIn.addEventListener('compositionstart',function(){comp=true;});
+  memoIn.addEventListener('compositionend',function(){comp=false;setTimeout(projEditMemoCount,0);});
+  memoIn.addEventListener('input',function(e){
+    var inIme=(typeof e.isComposing==='boolean'?e.isComposing:false)||comp;
+    if(!inIme)projEditMemoCount();
+  });
+  // 保存
+  document.getElementById('proj-edit-ok').addEventListener('click',function(){
+    var proj=this._proj;
+    if(!proj)return;
+    var newName=document.getElementById('proj-edit-name').value.trim();
+    var newMemo=Array.from(document.getElementById('proj-edit-memo').value).slice(0,10).join('');
+    if(!newName)return;
+    // 名前変更時のassignments更新
+    if(newName!==proj.name){
+      var oldName=proj.name;
+      if((state.projects||[]).find(function(p){return p.name===newName&&p!==proj;})){alert('同じ名前があります');return;}
+      var na={};
+      Object.keys(state.assignments).forEach(function(k){
+        na[k.indexOf(oldName+'__')===0?newName+'__'+k.slice(oldName.length+2):k]=state.assignments[k];
+      });
+      state.assignments=na;
+      proj.name=newName;
+    }
+    proj.memo=newMemo;
+    closeProjEditPopup();
+    if(projEditCallback)projEditCallback();
+  });
+  document.getElementById('proj-edit-cancel').addEventListener('click',closeProjEditPopup);
+  document.getElementById('proj-edit-overlay').addEventListener('click',function(e){
+    if(e.target===this)closeProjEditPopup();
+  });
+})();
+// ==== ここまで ====
 function renderAll(){
   renderMonthLabel();
   renderGrid();
   requestAnimationFrame(updateScrollbar);
 }
-// ==== ピンチイン・アウト（zoom方式: sticky header維持）====
+
+
+// ==== ピンチイン・アウト ====
 (function(){
-  var wrapper   = document.getElementById('grid-wrapper');
-  var table     = document.getElementById('grid');
+  var wrapper = document.getElementById('grid-wrapper');
+  var table   = document.getElementById('grid');
   var indicator = document.getElementById('pinch-indicator');
   var MIN_SCALE = 0.4, MAX_SCALE = 2.0;
   var scale = 1.0;
   var startDist = 0, startScale = 1.0;
-  var startMidX = 0, startMidY = 0;
   var indicatorTimer = null;
 
   function getDistance(t){
@@ -1160,27 +1293,11 @@ function renderAll(){
     return Math.sqrt(dx*dx + dy*dy);
   }
 
-  function getMid(t){
-    return {
-      x: (t[0].clientX + t[1].clientX) / 2,
-      y: (t[0].clientY + t[1].clientY) / 2
-    };
-  }
-
-  function applyScale(s, mid){
-    var prev = scale;
+  function applyScale(s){
     scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
-    // zoom を使うと position:sticky が維持される
-    table.style.zoom = scale;
-    // ピンチ中心点を基準にスクロール位置を補正
-    if(mid && prev > 0){
-      var ratio = scale / prev;
-      var rect  = wrapper.getBoundingClientRect();
-      var ox = mid.x - rect.left + wrapper.scrollLeft;
-      var oy = mid.y - rect.top  + wrapper.scrollTop;
-      wrapper.scrollLeft = ox * ratio - (mid.x - rect.left);
-      wrapper.scrollTop  = oy * ratio - (mid.y - rect.top);
-    }
+    table.style.transform = 'scale(' + scale + ')';
+    table.style.marginBottom = (scale < 1 ? (scale - 1) * table.offsetHeight + 'px' : '0');
+    table.style.marginRight  = (scale < 1 ? (scale - 1) * table.offsetWidth  + 'px' : '0');
   }
 
   function showIndicator(){
@@ -1195,8 +1312,6 @@ function renderAll(){
       e.preventDefault();
       startDist  = getDistance(e.touches);
       startScale = scale;
-      var m = getMid(e.touches);
-      startMidX = m.x; startMidY = m.y;
     }
   }, {passive: false});
 
@@ -1204,8 +1319,7 @@ function renderAll(){
     if(e.touches.length === 2){
       e.preventDefault();
       var dist = getDistance(e.touches);
-      var mid  = getMid(e.touches);
-      applyScale(startScale * (dist / startDist), mid);
+      applyScale(startScale * (dist / startDist));
       showIndicator();
     }
   }, {passive: false});
@@ -1220,8 +1334,7 @@ function renderAll(){
     if(e.touches.length > 0) return;
     var now = Date.now();
     if(now - lastTap < 300){
-      var rect = wrapper.getBoundingClientRect();
-      applyScale(1.0, {x: rect.left + rect.width/2, y: rect.top + rect.height/2});
+      applyScale(1.0);
       showIndicator();
     }
     lastTap = now;
