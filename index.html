@@ -33,7 +33,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .sync-dot{width:8px;height:8px;border-radius:50%;background:#ccc;}
 .sync-dot.ok{background:#22c55e;}.sync-dot.err{background:#ef4444;}.sync-dot.saving{background:#F59E0B;}
 
-#grid-wrapper{overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+#grid-wrapper{overflow:auto;-webkit-overflow-scrolling:touch;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+#grid-wrapper>table{transform-origin:0 0;transition:none;}
+#pinch-indicator{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);color:#fff;font-size:13px;padding:4px 14px;border-radius:20px;pointer-events:none;opacity:0;transition:opacity 0.4s;z-index:9999;}
 table{border-collapse:collapse;table-layout:fixed;}
 th{font-size:12px;font-weight:500;color:#555;padding:4px 2px;text-align:center;border:1px solid #9ca3af;background:#BAE6FD;vertical-align:middle;min-width:130px;}
 th.col-name{position:sticky;left:0;z-index:3;text-align:left;padding-left:6px;width:130px;min-width:130px;background:#BAE6FD;}
@@ -211,6 +213,7 @@ td.day-cell.delete-target{background:#FEE2E2 !important;outline:2px solid #E24B4
     </div>
   </div>
   <div id="grid-wrapper"><table id="grid"></table></div>
+<div id="pinch-indicator">100%</div>
   <!-- メモ入力ポップアップ -->
   <div class="memo-popup-overlay" id="memo-overlay">
     <div class="memo-popup">
@@ -1141,6 +1144,72 @@ function renderAll(){
   renderGrid();
   requestAnimationFrame(updateScrollbar);
 }
+// ==== ピンチイン・アウト ====
+(function(){
+  var wrapper = document.getElementById('grid-wrapper');
+  var table   = document.getElementById('grid');
+  var indicator = document.getElementById('pinch-indicator');
+  var MIN_SCALE = 0.4, MAX_SCALE = 2.0;
+  var scale = 1.0;
+  var startDist = 0, startScale = 1.0;
+  var indicatorTimer = null;
+
+  function getDistance(t){
+    var dx = t[0].clientX - t[1].clientX;
+    var dy = t[0].clientY - t[1].clientY;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+
+  function applyScale(s){
+    scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+    table.style.transform = 'scale(' + scale + ')';
+    // tableが縮んでもwrapperがスクロール範囲を保持するようにサイズ補正
+    table.style.marginBottom = (scale < 1 ? (scale - 1) * table.offsetHeight + 'px' : '0');
+    table.style.marginRight  = (scale < 1 ? (scale - 1) * table.offsetWidth  + 'px' : '0');
+  }
+
+  function showIndicator(){
+    indicator.textContent = Math.round(scale * 100) + '%';
+    indicator.style.opacity = '1';
+    clearTimeout(indicatorTimer);
+    indicatorTimer = setTimeout(function(){ indicator.style.opacity = '0'; }, 1200);
+  }
+
+  wrapper.addEventListener('touchstart', function(e){
+    if(e.touches.length === 2){
+      e.preventDefault();
+      startDist  = getDistance(e.touches);
+      startScale = scale;
+    }
+  }, {passive: false});
+
+  wrapper.addEventListener('touchmove', function(e){
+    if(e.touches.length === 2){
+      e.preventDefault();
+      var dist = getDistance(e.touches);
+      applyScale(startScale * (dist / startDist));
+      showIndicator();
+    }
+  }, {passive: false});
+
+  wrapper.addEventListener('touchend', function(e){
+    if(e.touches.length < 2){ showIndicator(); }
+  });
+
+  // ダブルタップでリセット
+  var lastTap = 0;
+  wrapper.addEventListener('touchend', function(e){
+    if(e.touches.length > 0) return;
+    var now = Date.now();
+    if(now - lastTap < 300){
+      applyScale(1.0);
+      showIndicator();
+    }
+    lastTap = now;
+  });
+})();
+// ==== ここまで ====
+
 </script>
 </body>
 </html>
