@@ -36,8 +36,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 #grid-wrapper{overflow:auto;-webkit-overflow-scrolling:touch;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
 table{border-collapse:collapse;table-layout:fixed;}
 th{font-size:12px;font-weight:500;color:#555;padding:4px 2px;text-align:center;border:1px solid #9ca3af;background:#BAE6FD;vertical-align:middle;min-width:130px;}
+th.month-header{background:#BAE6FD;text-align:center;font-size:12px;font-weight:700;color:#0369A1;padding:6px 4px;line-height:1.6;height:28px;border-bottom:1px solid #9ca3af;position:-webkit-sticky;position:sticky;top:0;z-index:4;}
+tr.day-row th.day-header{position:-webkit-sticky;position:sticky;top:28px;z-index:4;width:130px;min-width:130px;}
+tr.month-row th.col-name,tr.day-row th.col-name{position:-webkit-sticky;position:sticky;top:0;z-index:6;}
 th.col-name{position:sticky;left:0;z-index:3;text-align:left;padding-left:6px;width:130px;min-width:130px;background:#BAE6FD;}
-th.day-header{cursor:pointer;}
+th.day-header{cursor:pointer;width:130px;min-width:130px;}
 th.day-header:hover{background:#FFF3CD;}
 th.day-header.is-holiday{background:#FFECEC;}
 th .day-num{font-size:13px;font-weight:700;line-height:1.3;}
@@ -74,7 +77,7 @@ td.name-cell.yasumi-name{background:#FEF9C3 !important;}
 .memo-popup-ok{background:#378ADD;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;}
 .memo-popup-cancel{background:#f3f4f6;color:#555;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;}
 
-td.day-cell{border:1px solid #9ca3af;vertical-align:top;padding:3px;min-width:130px;height:110px;overflow:hidden;position:relative;cursor:pointer;display:flex;flex-direction:column;}
+td.day-cell{border:1px solid #9ca3af;vertical-align:top;padding:3px;min-width:130px;height:110px;overflow:hidden;position:relative;cursor:pointer;}
 td.day-cell:active{background:#EBF4FF;}
 td.day-cell.col-holiday{background:#FFECEC;cursor:default;}
 td.day-cell.col-holiday::after{content:'休';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;font-weight:700;color:#E24B4A55;pointer-events:none;}
@@ -221,6 +224,20 @@ td.day-cell.delete-target{background:#FEE2E2 !important;outline:2px solid #E24B4
   <div id="grid-wrapper"><table id="grid"></table></div>
 <div id="pinch-indicator">100%</div>
   <!-- メモ入力ポップアップ -->
+  <!-- 氏名編集ポップアップ -->
+  <div class="memo-popup-overlay" id="name-edit-overlay">
+    <div class="memo-popup">
+      <div class="memo-popup-title" id="name-edit-title">氏名変更</div>
+      <div style="margin-top:10px;">
+        <input id="name-edit-input" type="text" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;user-select:text;-webkit-user-select:text;" />
+      </div>
+      <div id="name-edit-error" style="font-size:11px;color:#E24B4A;margin-top:4px;min-height:16px;"></div>
+      <div class="memo-popup-btns" style="margin-top:10px;">
+        <button class="memo-popup-cancel" id="name-edit-cancel">キャンセル</button>
+        <button class="memo-popup-ok" id="name-edit-ok">保存</button>
+      </div>
+    </div>
+  </div>
   <!-- 案件編集ポップアップ -->
   <div class="memo-popup-overlay" id="proj-edit-overlay">
     <div class="memo-popup">
@@ -285,7 +302,7 @@ var state={
   subcontractors:['協力会社A','協力会社B'],
   projects:[{name:'休み',memo:'',id:genId()},{name:'案件A',memo:'',id:genId()},{name:'案件B',memo:'',id:genId()},{name:'案件C',memo:'',id:genId()},{name:'案件D',memo:'',id:genId()}],
   assignments:{},holidayDays:[],
-  colors:{},projColors:{},notes:{}
+  colors:{},projColors:{},notes:{},officeEmps:[]
 };
 
 var todayDate=new Date();
@@ -459,33 +476,58 @@ function createBin(){
   }).catch(function(){setSyncStatus('err','接続エラー');});
 }
 function loadFromBin(){
-  if(document.querySelector('.settings-modal-open'))return; // 設定中は更新しない
-  if(document.getElementById('memo-overlay').classList.contains('open'))return; // メモ入力中は更新しない
+  if(document.getElementById('settings-modal')&&document.getElementById('settings-modal').style.display!=='none')return;
+  if(document.getElementById('memo-overlay').classList.contains('open'))return;
+  if(document.getElementById('proj-edit-overlay').classList.contains('open'))return;
+  if(document.getElementById('name-edit-overlay').classList.contains('open'))return;
   if(!API_KEY||!BIN_ID)return;
   fetch('https://api.jsonbin.io/v3/b/'+BIN_ID+'/latest',{headers:{'X-Master-Key':API_KEY}})
   .then(function(r){return r.json();}).then(function(d){
-    if(d.record){state=d.record;if(!state.assignments)state.assignments={};if(!state.holidayDays)state.holidayDays=[];if(!state.colors)state.colors={};if(!state.projColors)state.projColors={};if(!state.notes)state.notes={};
+    if(d.record){state=d.record;
+      if(!state.assignments)state.assignments={};
+      if(!state.holidayDays)state.holidayDays=[];
+      if(!state.colors)state.colors={};
+      if(!state.projColors)state.projColors={};
+      if(!state.notes)state.notes={};
       (state.projects||[]).forEach(function(p){if(!p.id)p.id=genId();});
-      // 名前キーの配置データをIDキーにマイグレーション
       migrateAssignments();}
+    try{localStorage.setItem('haichi_cache',JSON.stringify(state));}catch(e){}
     setSyncStatus('ok','同期済み');renderAll();
   }).catch(function(){setSyncStatus('err','読込エラー');renderAll();});
 }
 function saveToBin(){
   if(!API_KEY||!BIN_ID)return;
-  clearTimeout(saveTimer);setSyncStatus('saving','保存中...');
+  clearTimeout(saveTimer);
+  // localStorageに即保存
+  try{localStorage.setItem('haichi_cache',JSON.stringify(state));}catch(e){}
+  // UIを即「同期済み」に（楽観的更新）
+  setSyncStatus('ok','同期済み');
+  // サーバーへはバックグラウンドで送信
   saveTimer=setTimeout(function(){
     fetch('https://api.jsonbin.io/v3/b/'+BIN_ID,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},body:JSON.stringify(state)})
-    .then(function(){setSyncStatus('ok','同期済み');}).catch(function(){setSyncStatus('err','保存エラー');});
-  },1000);
+    .catch(function(){setSyncStatus('err','保存エラー');});
+  },0);
 }
 function setSyncStatus(type,text){
   document.getElementById('sync-dot').className='sync-dot '+(type==='ok'?'ok':type==='err'?'err':'saving');
   document.getElementById('sync-text').textContent=text;
 }
-if(API_KEY&&BIN_ID){document.getElementById('setup-banner').style.display='none';setSyncStatus('saving','読み込み中...');loadFromBin();}
-else renderAll();
-setInterval(function(){if(API_KEY&&BIN_ID)loadFromBin();},10000);
+if(API_KEY&&BIN_ID){
+  document.getElementById('setup-banner').style.display='none';
+  try{
+    var _c=localStorage.getItem('haichi_cache');
+    if(_c){var _s=JSON.parse(_c);state=_s;
+      if(!state.assignments)state.assignments={};
+      if(!state.holidayDays)state.holidayDays=[];
+      if(!state.colors)state.colors={};
+      if(!state.projColors)state.projColors={};
+      if(!state.notes)state.notes={};
+      renderAll();setSyncStatus('ok','同期済み');}
+    else setSyncStatus('saving','読み込み中...');
+  }catch(e){setSyncStatus('saving','読み込み中...');}
+  loadFromBin();
+}else renderAll();
+setInterval(function(){if(API_KEY&&BIN_ID)loadFromBin();},30000);
 
 // ---- ヘルパー ----
 function migrateAssignments(){
@@ -540,7 +582,7 @@ function isToday(y,m,d){return todayDate.getFullYear()===y&&todayDate.getMonth()
 function getAllAssigned(y,m,d){
   var used=new Set();
   // 社員・協力会社の両方を重複チェック対象にする
-  var allPeople=(state.employees||[]).concat(state.subcontractors||[]);
+  var allPeople=(state.employees||[]).concat(state.subcontractors||[]); // 社内社員は重複チェックなし
   (state.projects||[]).forEach(function(p){
     getA(p.id||p.name,y,m,d).forEach(function(v){if(allPeople.indexOf(v)>=0)used.add(v);});
   });
@@ -549,6 +591,7 @@ function getAllAssigned(y,m,d){
 function getColor(v){
   if(state.colors&&state.colors[v])return state.colors[v];
   if((state.subcontractors||[]).indexOf(v)>=0)return SUB_COLOR;
+  if((state.officeEmps||[]).indexOf(v)>=0)return '#9ca3af';
   return EMP_COLOR;
 }
 
@@ -565,7 +608,7 @@ function openPanel(projId,y,m,d){
   document.getElementById('panel-overlay').style.display='block';
   document.getElementById('assign-panel').style.display='block';
   document.querySelectorAll('.selected-cell').forEach(function(el){el.classList.remove('selected-cell');});
-  var td=document.querySelector('td.day-cell[data-key="'+cKey(proj,y,m,d)+'"]');
+  var td=document.querySelector('td.day-cell[data-key="'+cKey(projId,y,m,d)+'"]');
   if(td)td.classList.add('selected-cell');
 }
 function closePanel(){
@@ -602,12 +645,19 @@ function renderPanelBody(){
     };
     return btn;
   }
-  var empSec=makeSec('👷 社員');var empPpl=empSec.querySelector('.panel-people');
+  var empSec=makeSec('👷 現場社員');var empPpl=empSec.querySelector('.panel-people');
   (state.employees||[]).forEach(function(e){empPpl.appendChild(makeBtn(e,EMP_COLOR));});
   body.appendChild(empSec);
   var subSec=makeSec('🔧 協力会社');var subPpl=subSec.querySelector('.panel-people');
   (state.subcontractors||[]).forEach(function(s){subPpl.appendChild(makeBtn(s,SUB_COLOR));});
   body.appendChild(subSec);
+  // 社内社員は休み行のみ表示
+  var projObj=(state.projects||[]).find(function(p){return (p.id||p.name)===proj;});
+  if(projObj&&projObj.name===YASUMI_ROW){
+    var offSec=makeSec('🏢 社内社員');var offPpl=offSec.querySelector('.panel-people');
+    (state.officeEmps||[]).forEach(function(e){offPpl.appendChild(makeBtn(e,'#9ca3af'));});
+    body.appendChild(offSec);
+  }
   // 備考欄
   var noteKey=cKey(proj,y,m,d);
   var noteSec=document.createElement('div');
@@ -665,9 +715,13 @@ function renderSettings(){
   grpBody.appendChild(empTitle);
   grpBody.appendChild(makeSettingsSec('','emp' ,state.employees,'emp'));
   // 協力会社サブセクション
-  var subTitle=document.createElement('div');subTitle.className='settings-sub-title';subTitle.textContent='🔧 協抜会社';
+  var subTitle=document.createElement('div');subTitle.className='settings-sub-title';subTitle.textContent='🔧 協力会社';
   grpBody.appendChild(subTitle);
   grpBody.appendChild(makeSettingsSec('','sub',state.subcontractors,'sub'));
+  // 社内社員サブセクション
+  var offTitle=document.createElement('div');offTitle.className='settings-sub-title';offTitle.textContent='🏢 社内社員（休みのみ配置可）';
+  grpBody.appendChild(offTitle);
+  grpBody.appendChild(makeSettingsSec('','off',state.officeEmps,'off'));
   grp.appendChild(grpHead);grp.appendChild(grpBody);body.appendChild(grp);
   var sec=document.createElement('div');
   var title=document.createElement('div');title.className='settings-sec-title';title.textContent='🏗️ 案件';sec.appendChild(title);
@@ -709,7 +763,7 @@ function renderSettings(){
             if(!isNaN(toIdx)&&toIdx!==dragSrcIdx){
               var moved=state.projects.splice(dragSrcIdx,1)[0];
               state.projects.splice(toIdx,0,moved);
-              saveToBin();renderAll();rebuildProj();
+              saveToBin();renderAll();renderSettings();
             }
           }
         }
@@ -732,17 +786,24 @@ function renderSettings(){
       })(proj.id,projDot);
       var nm=document.createElement('span');nm.className='settings-item-name';nm.textContent=proj.name;
       var rb=document.createElement('button');rb.className='s-btn';rb.textContent='変更';
-      rb.onclick=(function(capturedIdx){
+      rb.onclick=(function(capturedProj){
         return function(){
-          var currentProj=state.projects[capturedIdx];
-          if(!currentProj)return;
+          // state.projectsからIDで最新のprojを取得
+          var currentProj=(state.projects||[]).find(function(p){return p===capturedProj||p.id===capturedProj.id;});
+          if(!currentProj)currentProj=capturedProj;
           openProjEditPopup(currentProj,function(){
-            saveToBin();renderAll();rebuildProj();
+            saveToBin();renderAll();renderSettings();
           });
         };
-      })(idx);
+      })(proj);
       var db=document.createElement('button');db.className='s-btn danger';db.textContent='削除';
-      db.onclick=function(){if(!confirm(proj.name+'を削除しますか？'))return;state.projects=state.projects.filter(function(p){return p.name!==proj.name;});saveToBin();renderAll();rebuildProj();};
+      (function(p){
+        db.onclick=function(){
+          if(!window.confirm(p.name+'を削除します？'))return;
+          state.projects=state.projects.filter(function(x){return x.id!==p.id;});
+          saveToBin();renderAll();renderSettings();
+        };
+      })(proj);
       item.appendChild(handle);item.appendChild(projDot);item.appendChild(nm);item.appendChild(rb);item.appendChild(db);list.appendChild(item);
     });
   }
@@ -759,7 +820,7 @@ function renderSettings(){
   ar1.appendChild(ai);ar1.appendChild(ab);ar.appendChild(ar1);ar.appendChild(am);sec.appendChild(ar);body.appendChild(sec);
 }
 function makeSettingsSec(label,key,list,type){
-  var color=type==='emp'?EMP_COLOR:SUB_COLOR;
+  var color=type==='emp'?EMP_COLOR:type==='off'?'#9ca3af':SUB_COLOR;
   var sec=document.createElement('div');
   if(label){var t=document.createElement('div');t.className='settings-sec-title';t.textContent=label;sec.appendChild(t);}
   var listEl=document.createElement('div');listEl.className='settings-list';listEl.style.touchAction='pan-y';
@@ -802,30 +863,34 @@ function makeSettingsSec(label,key,list,type){
       });
       var nm=document.createElement('span');nm.className='settings-item-name';nm.textContent=name;
       var rb=document.createElement('button');rb.className='s-btn';rb.textContent='変更';
-      rb.onclick=(function(capturedIdx){
+      rb.onclick=(function(capturedIdx,lst,tp,reb){
         return function(){
-          var currentName=list[capturedIdx];
+          var currentName=lst[capturedIdx];
           if(!currentName)return;
-          var n=window.prompt((type==='emp'?'社員名':'協力会社名')+'を変更',currentName);
-          if(!n||!n.trim())return;
-          n=n.trim();
-          if(n===currentName)return;
-          if((list||[]).indexOf(n)>=0){alert('同じ名前があります');return;}
-          list[capturedIdx]=n;
-          Object.keys(state.assignments).forEach(function(k){
-            state.assignments[k]=state.assignments[k].map(function(v){return v===currentName?n:v;});
-          });
-          if(state.colors&&state.colors[currentName]){state.colors[n]=state.colors[currentName];delete state.colors[currentName];}
-          saveToBin();renderAll();rebuild();
+          openNameEditPopup(
+            (tp==='emp'?'社員名':'協力会社名'),
+            currentName,
+            function(n){
+              if((lst||[]).indexOf(n)>=0){return '同じ名前があります';}
+              lst[capturedIdx]=n;
+              Object.keys(state.assignments).forEach(function(k){
+                state.assignments[k]=state.assignments[k].map(function(v){return v===currentName?n:v;});
+              });
+              if(state.colors&&state.colors[currentName]){state.colors[n]=state.colors[currentName];delete state.colors[currentName];}
+              saveToBin();renderAll();reb();
+              return null;
+            }
+          );
         };
-      })(idx);
+      })(idx,list,type,rebuild);
       var db=document.createElement('button');db.className='s-btn danger';db.textContent='削除';
       db.onclick=function(){
-        if(!confirm(name+'を削除しますか？'))return;
+        if(!window.confirm(name+'を削除しますか？'))return;
         if(type==='emp')state.employees=state.employees.filter(function(e){return e!==name;});
+        else if(type==='off')state.officeEmps=(state.officeEmps||[]).filter(function(e){return e!==name;});
         else state.subcontractors=state.subcontractors.filter(function(e){return e!==name;});
         Object.keys(state.assignments).forEach(function(k){state.assignments[k]=state.assignments[k].filter(function(v){return v!==name;});if(!state.assignments[k].length)delete state.assignments[k];});
-        saveToBin();renderAll();rebuild();
+        saveToBin();renderAll();renderSettings();
       };
       item.appendChild(handle);item.appendChild(dot);item.appendChild(nm);item.appendChild(rb);item.appendChild(db);
       listEl.appendChild(item);
@@ -853,7 +918,7 @@ function makeSettingsSec(label,key,list,type){
         if(!isNaN(toIdx)&&toIdx!==dragSrcIdx){
           var moved=list.splice(dragSrcIdx,1)[0];
           list.splice(toIdx,0,moved);
-          saveToBin();renderAll();rebuild();
+          saveToBin();renderAll();renderSettings();
         }
       }
     }
@@ -866,10 +931,14 @@ function makeSettingsSec(label,key,list,type){
   var ai=document.createElement('input');ai.className='add-item-input';ai.placeholder=(type==='emp'?'社員名':'協力会社名')+'を入力';
   var ab=document.createElement('button');ab.className='add-item-submit';ab.textContent='追加';
   ab.onclick=function(){
-    var name=ai.value.trim();if(!name||(list||[]).indexOf(name)>=0)return;
+    var name=ai.value.trim();
+    var cur=type==='emp'?(state.employees||[]):type==='off'?(state.officeEmps||[]):(state.subcontractors||[]);
+    if(!name||cur.indexOf(name)>=0)return;
     if(type==='emp'){if(!state.employees)state.employees=[];state.employees.push(name);}
+    else if(type==='off'){if(!state.officeEmps)state.officeEmps=[];state.officeEmps.push(name);}
     else{if(!state.subcontractors)state.subcontractors=[];state.subcontractors.push(name);}
     ai.value='';saveToBin();renderAll();rebuild();
+    setTimeout(function(){ai.focus();},50);
   };
   var comp_ai=false;ai.addEventListener('compositionstart',function(){comp_ai=true;});ai.addEventListener('compositionend',function(){comp_ai=false;});ai.onkeydown=function(e){if(e.key==='Enter'&&!comp_ai)ab.click();};;
   ar.appendChild(ai);ar.appendChild(ab);sec.appendChild(ar);return sec;
@@ -1071,21 +1140,36 @@ function renderGrid(){
   var table=document.getElementById('grid');table.innerHTML='';
   var DOWS=['日','月','火','水','木','金','土'];
   var thead=document.createElement('thead');
-  var hr=document.createElement('tr');
-  var th0=document.createElement('th');th0.className='col-name';th0.textContent='案件';hr.appendChild(th0);
+  // 月行
+  var monthGroups=[];
+  dayList.forEach(function(di){
+    var key=di.y+'-'+di.m;
+    if(!monthGroups.length||monthGroups[monthGroups.length-1].key!==key)
+      monthGroups.push({key:key,y:di.y,m:di.m,days:[]});
+    monthGroups[monthGroups.length-1].days.push(di);
+  });
+  var monthRow=document.createElement('tr');monthRow.className='month-row';
+  var th0=document.createElement('th');th0.className='col-name';th0.rowSpan=2;
+  th0.textContent='案件';th0.style.verticalAlign='middle';monthRow.appendChild(th0);
+  monthGroups.forEach(function(mg){
+    var mth=document.createElement('th');mth.className='month-header';
+    mth.colSpan=mg.days.length;mth.textContent=(mg.m+1)+'月';
+    monthRow.appendChild(mth);
+  });
+  thead.appendChild(monthRow);
+  // 日付行
+  var dayRow=document.createElement('tr');dayRow.className='day-row';
   dayList.forEach(function(di){
     var dow=getDow(di.y,di.m,di.d);
     var th=document.createElement('th');th.className='day-header';
     if(dow===0)th.classList.add('sun');else if(dow===6)th.classList.add('sat');
     if(isToday(di.y,di.m,di.d))th.classList.add('today-col');
     var hol=isHol(di.y,di.m,di.d);if(hol)th.classList.add('is-holiday');
-    // 月初は月表示
-    var dayLabel=di.d===1?'<div class="month-mark">'+(di.m+1)+'月</div><div class="day-num">1</div>':'<div class="day-num">'+di.d+'</div>';
-    th.innerHTML=dayLabel+'<div class="day-dow">'+DOWS[dow]+'</div>'+(hol?'<div class="hol-mark">休</div>':'');
+    th.innerHTML='<div class="day-num">'+di.d+'</div><div class="day-dow">'+DOWS[dow]+'</div>'+(hol?'<div class="hol-mark">休</div>':'');
     (function(dii){th.addEventListener('click',function(){toggleHol(dii.y,dii.m,dii.d);});})(di);
-    hr.appendChild(th);
+    dayRow.appendChild(th);
   });
-  thead.appendChild(hr);table.appendChild(thead);
+  thead.appendChild(dayRow);table.appendChild(thead);
 
   var tbody=document.createElement('tbody');
   (state.projects||[]).forEach(function(proj){
@@ -1313,12 +1397,47 @@ function projEditMemoCount(){
       proj.name=newName;
     }
     proj.memo=newMemo;
+    var cb=projEditCallback;
     closeProjEditPopup();
-    if(projEditCallback)projEditCallback();
+    if(cb)cb();
   });
   document.getElementById('proj-edit-cancel').addEventListener('click',closeProjEditPopup);
   document.getElementById('proj-edit-overlay').addEventListener('click',function(e){
     if(e.target===this)closeProjEditPopup();
+  });
+})();
+// ==== ここまで ====
+// ==== 氏名編集ポップアップ ====
+var nameEditCallback=null;
+function openNameEditPopup(label,currentVal,onSave){
+  document.getElementById('name-edit-title').textContent=label+'を変更';
+  document.getElementById('name-edit-input').value=currentVal;
+  document.getElementById('name-edit-error').textContent='';
+  document.getElementById('name-edit-overlay').classList.add('open');
+  document.getElementById('name-edit-ok')._onSave=onSave;
+  setTimeout(function(){document.getElementById('name-edit-input').focus();},100);
+}
+function closeNameEditPopup(){
+  document.getElementById('name-edit-overlay').classList.remove('open');
+}
+(function(){
+  var inp=document.getElementById('name-edit-input');
+  var comp=false;
+  inp.addEventListener('compositionstart',function(){comp=true;});
+  inp.addEventListener('compositionend',function(){comp=false;});
+  document.getElementById('name-edit-ok').addEventListener('click',function(){
+    var n=document.getElementById('name-edit-input').value.trim();
+    if(!n)return;
+    var err=this._onSave(n);
+    if(err){document.getElementById('name-edit-error').textContent=err;return;}
+    closeNameEditPopup();
+  });
+  inp.addEventListener('keydown',function(e){
+    if(e.key==='Enter'&&!comp)document.getElementById('name-edit-ok').click();
+  });
+  document.getElementById('name-edit-cancel').addEventListener('click',closeNameEditPopup);
+  document.getElementById('name-edit-overlay').addEventListener('click',function(e){
+    if(e.target===this)closeNameEditPopup();
   });
 })();
 // ==== ここまで ====
