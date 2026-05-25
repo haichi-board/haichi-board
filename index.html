@@ -33,13 +33,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .sync-dot{width:8px;height:8px;border-radius:50%;background:#ccc;}
 .sync-dot.ok{background:#22c55e;}.sync-dot.err{background:#ef4444;}.sync-dot.saving{background:#F59E0B;}
 
-#grid-wrapper{overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+#grid-wrapper{overflow:auto;-webkit-overflow-scrolling:touch;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
 table{border-collapse:collapse;table-layout:fixed;}
 th{font-size:12px;font-weight:500;color:#555;padding:4px 2px;text-align:center;border:1px solid #9ca3af;background:#BAE6FD;vertical-align:middle;min-width:130px;}
-th.col-name{position:-webkit-sticky;position:sticky;left:0;z-index:12;text-align:left;padding-left:6px;width:130px;min-width:130px;background:#BAE6FD;}
-th.month-header{background:#BAE6FD;text-align:center;font-size:12px;font-weight:700;color:#0369A1;padding:5px 4px;line-height:1.4;border-bottom:1px solid #9ca3af;position:-webkit-sticky;position:sticky;top:0;z-index:4;}
-tr.day-row th.day-header{position:-webkit-sticky;position:sticky;top:28px;z-index:4;}
-tr.month-row th.col-name,tr.day-row th.col-name{position:-webkit-sticky;position:sticky;top:0;z-index:6;}
+th.col-name{position:sticky;left:0;z-index:3;text-align:left;padding-left:6px;width:130px;min-width:130px;background:#BAE6FD;}
 th.day-header{cursor:pointer;}
 th.day-header:hover{background:#FFF3CD;}
 th.day-header.is-holiday{background:#FFECEC;}
@@ -66,7 +63,7 @@ td.name-cell.yasumi-name{background:#FEF9C3 !important;}
 .memo-cell{padding:2px 4px;border-top:1px solid #9ca3af;touch-action:auto;pointer-events:auto;user-select:text;-webkit-user-select:text;cursor:pointer;}
 .memo-preview{font-size:11px;color:#888;min-height:22px;line-height:1.4;white-space:pre-wrap;word-break:break-all;}
 .memo-preview.empty{color:#ddd;}
-.cell-note{font-size:9px;color:#444;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;position:absolute;bottom:28px;left:0;right:0;background:rgba(255,255,255,0.9);border-top:1px dashed #bbb;}
+.cell-note{font-size:9px;color:#555;padding:2px 3px 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-top:1px dashed #ccc;margin-top:2px;line-height:1.3;}
 .memo-popup-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:3000;align-items:center;justify-content:center;}
 .memo-popup-overlay.open{display:flex;}
 .memo-popup{background:#fff;border-radius:12px;padding:16px;width:min(320px,90vw);box-shadow:0 8px 32px rgba(0,0,0,0.18);}
@@ -77,7 +74,7 @@ td.name-cell.yasumi-name{background:#FEF9C3 !important;}
 .memo-popup-ok{background:#378ADD;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;}
 .memo-popup-cancel{background:#f3f4f6;color:#555;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;}
 
-td.day-cell{border:1px solid #9ca3af;vertical-align:top;padding:3px;min-width:130px;height:110px;overflow:hidden;position:relative;cursor:pointer;}
+td.day-cell{border:1px solid #9ca3af;vertical-align:top;padding:3px;min-width:130px;height:110px;overflow:hidden;position:relative;cursor:pointer;display:flex;flex-direction:column;}
 td.day-cell:active{background:#EBF4FF;}
 td.day-cell.col-holiday{background:#FFECEC;cursor:default;}
 td.day-cell.col-holiday::after{content:'休';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;font-weight:700;color:#E24B4A55;pointer-events:none;}
@@ -117,7 +114,7 @@ td.day-cell.month-start{border-left:2px solid #378ADD;}
 td.day-cell.fill-target{background:#BFDBFE !important;outline:2px solid #378ADD;outline-offset:-2px;}
 td.day-cell.delete-target{background:#FEE2E2 !important;outline:2px solid #E24B4A;outline-offset:-2px;}
 
-.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;align-content:start;overflow:hidden;height:100%;}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;align-content:start;overflow:hidden;}
 .cell-chip{display:flex;align-items:center;padding:2px 4px;border-radius:3px;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
 
 .add-project-row td{padding:6px 8px;border:1px solid #9ca3af;background:#fafafa;}
@@ -568,7 +565,7 @@ function openPanel(projId,y,m,d){
   document.getElementById('panel-overlay').style.display='block';
   document.getElementById('assign-panel').style.display='block';
   document.querySelectorAll('.selected-cell').forEach(function(el){el.classList.remove('selected-cell');});
-  var td=document.querySelector('td.day-cell[data-key="'+cKey(projId,y,m,d)+'"]');
+  var td=document.querySelector('td.day-cell[data-key="'+cKey(proj,y,m,d)+'"]');
   if(td)td.classList.add('selected-cell');
 }
 function closePanel(){
@@ -1074,37 +1071,21 @@ function renderGrid(){
   var table=document.getElementById('grid');table.innerHTML='';
   var DOWS=['日','月','火','水','木','金','土'];
   var thead=document.createElement('thead');
-  // --- 月行（1段目）---
-  var monthGroups=[];
-  dayList.forEach(function(di){
-    var key=di.y+'-'+di.m;
-    if(!monthGroups.length||monthGroups[monthGroups.length-1].key!==key)
-      monthGroups.push({key:key,y:di.y,m:di.m,days:[]});
-    monthGroups[monthGroups.length-1].days.push(di);
-  });
-  var monthRow=document.createElement('tr');monthRow.className='month-row';
-  var th0=document.createElement('th');th0.className='col-name';th0.rowSpan=2;
-  th0.textContent='案件';th0.style.verticalAlign='middle';monthRow.appendChild(th0);
-  monthGroups.forEach(function(mg){
-    var mth=document.createElement('th');mth.className='month-header';
-    mth.colSpan=mg.days.length;
-    mth.textContent=(mg.m+1)+'月';
-    monthRow.appendChild(mth);
-  });
-  thead.appendChild(monthRow);
-  // --- 日付行（2段目）---
-  var dayRow=document.createElement('tr');dayRow.className='day-row';
+  var hr=document.createElement('tr');
+  var th0=document.createElement('th');th0.className='col-name';th0.textContent='案件';hr.appendChild(th0);
   dayList.forEach(function(di){
     var dow=getDow(di.y,di.m,di.d);
     var th=document.createElement('th');th.className='day-header';
     if(dow===0)th.classList.add('sun');else if(dow===6)th.classList.add('sat');
     if(isToday(di.y,di.m,di.d))th.classList.add('today-col');
     var hol=isHol(di.y,di.m,di.d);if(hol)th.classList.add('is-holiday');
-    th.innerHTML='<div class="day-num">'+di.d+'</div><div class="day-dow">'+DOWS[dow]+'</div>'+(hol?'<div class="hol-mark">休</div>':'');
+    // 月初は月表示
+    var dayLabel=di.d===1?'<div class="month-mark">'+(di.m+1)+'月</div><div class="day-num">1</div>':'<div class="day-num">'+di.d+'</div>';
+    th.innerHTML=dayLabel+'<div class="day-dow">'+DOWS[dow]+'</div>'+(hol?'<div class="hol-mark">休</div>':'');
     (function(dii){th.addEventListener('click',function(){toggleHol(dii.y,dii.m,dii.d);});})(di);
-    dayRow.appendChild(th);
+    hr.appendChild(th);
   });
-  thead.appendChild(dayRow);table.appendChild(thead);
+  thead.appendChild(hr);table.appendChild(thead);
 
   var tbody=document.createElement('tbody');
   (state.projects||[]).forEach(function(proj){
