@@ -292,7 +292,7 @@ td.day-cell.delete-target{background:#FEE2E2 !important;outline:2px solid #E24B4
 </div>
 
 <script>
-var EMP_COLOR='#378ADD',SUB_COLOR='#888780';
+var EMP_COLOR='#378ADD',SUB_COLOR='#888780',OFFICE_COLOR='#9ca3af';
 var YASUMI_ROW='休み';
 var API_KEY='$2a$10$NKRfuyRjMWLW2IXW0UpxG.Lk.kj4we/S4sMUgQo7O0h4AbLL4qm6K';
 var BIN_ID='6a0a6a8d250b1311c366d120';
@@ -482,31 +482,58 @@ function loadFromBin(){
   if(document.getElementById('name-edit-overlay').classList.contains('open'))return;
   if(!API_KEY||!BIN_ID)return;
   fetch('https://api.jsonbin.io/v3/b/'+BIN_ID+'/latest',{headers:{'X-Master-Key':API_KEY}})
-  .then(function(r){return r.json();}).then(function(d){
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(d){
     if(d.record){state=d.record;
       if(!state.assignments)state.assignments={};
       if(!state.holidayDays)state.holidayDays=[];
       if(!state.colors)state.colors={};
       if(!state.projColors)state.projColors={};
       if(!state.notes)state.notes={};
+      if(!state.officeEmps)state.officeEmps=[];
       (state.projects||[]).forEach(function(p){if(!p.id)p.id=genId();});
       migrateAssignments();}
     try{localStorage.setItem('haichi_cache',JSON.stringify(state));}catch(e){}
     setSyncStatus('ok','同期済み');renderAll();
-  }).catch(function(){setSyncStatus('err','読込エラー');renderAll();});
+  }).catch(function(err){
+    // ローカルキャッシュがあれば継続利用
+    setSyncStatus('err','読込エラー'+(err&&err.message?' ('+err.message+')':''));
+    renderAll();
+  });
 }
+var _saveRetry=0,_saveRetryTimer=null;
 function saveToBin(){
   if(!API_KEY||!BIN_ID)return;
-  clearTimeout(saveTimer);
-  // localStorageに即保存
+  clearTimeout(saveTimer);clearTimeout(_saveRetryTimer);_saveRetry=0;
+  // localStorageに即保存（オフライン時もデータ保持）
   try{localStorage.setItem('haichi_cache',JSON.stringify(state));}catch(e){}
-  // UIを即「同期済み」に（楽観的更新）
-  setSyncStatus('ok','同期済み');
-  // サーバーへはバックグラウンドで送信
-  saveTimer=setTimeout(function(){
-    fetch('https://api.jsonbin.io/v3/b/'+BIN_ID,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},body:JSON.stringify(state)})
-    .catch(function(){setSyncStatus('err','保存エラー');});
-  },0);
+  setSyncStatus('saving','保存中...');
+  // 1500ms デバウンス後にサーバー送信
+  saveTimer=setTimeout(_doSave,1500);
+}
+function _doSave(){
+  var body=JSON.stringify(state);
+  fetch('https://api.jsonbin.io/v3/b/'+BIN_ID,{
+    method:'PUT',
+    headers:{'Content-Type':'application/json','X-Master-Key':API_KEY},
+    body:body
+  })
+  .then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    _saveRetry=0;
+    setSyncStatus('ok','同期済み');
+  })
+  .catch(function(err){
+    _saveRetry++;
+    if(_saveRetry<=3){
+      var wait=[3000,6000,12000][_saveRetry-1]||12000;
+      setSyncStatus('saving','再試行中 '+_saveRetry+'/3...');
+      _saveRetryTimer=setTimeout(_doSave,wait);
+    }else{
+      _saveRetry=0;
+      setSyncStatus('err','未同期（ローカル保存済み）');
+    }
+  });
 }
 function setSyncStatus(type,text){
   document.getElementById('sync-dot').className='sync-dot '+(type==='ok'?'ok':type==='err'?'err':'saving');
@@ -522,6 +549,7 @@ if(API_KEY&&BIN_ID){
       if(!state.colors)state.colors={};
       if(!state.projColors)state.projColors={};
       if(!state.notes)state.notes={};
+      if(!state.officeEmps)state.officeEmps=[];
       renderAll();setSyncStatus('ok','同期済み');}
     else setSyncStatus('saving','読み込み中...');
   }catch(e){setSyncStatus('saving','読み込み中...');}
@@ -591,7 +619,7 @@ function getAllAssigned(y,m,d){
 function getColor(v){
   if(state.colors&&state.colors[v])return state.colors[v];
   if((state.subcontractors||[]).indexOf(v)>=0)return SUB_COLOR;
-  if((state.officeEmps||[]).indexOf(v)>=0)return '#9ca3af';
+  if((state.officeEmps||[]).indexOf(v)>=0)return OFFICE_COLOR;
   return EMP_COLOR;
 }
 
@@ -655,7 +683,7 @@ function renderPanelBody(){
   var projObj=(state.projects||[]).find(function(p){return (p.id||p.name)===proj;});
   if(projObj&&projObj.name===YASUMI_ROW){
     var offSec=makeSec('🏢 社内社員');var offPpl=offSec.querySelector('.panel-people');
-    (state.officeEmps||[]).forEach(function(e){offPpl.appendChild(makeBtn(e,'#9ca3af'));});
+    (state.officeEmps||[]).forEach(function(e){offPpl.appendChild(makeBtn(e,OFFICE_COLOR));});
     body.appendChild(offSec);
   }
   // 備考欄
@@ -721,6 +749,7 @@ function renderSettings(){
   // 社内社員サブセクション
   var offTitle=document.createElement('div');offTitle.className='settings-sub-title';offTitle.textContent='🏢 社内社員（休みのみ配置可）';
   grpBody.appendChild(offTitle);
+  if(!state.officeEmps)state.officeEmps=[];
   grpBody.appendChild(makeSettingsSec('','off',state.officeEmps,'off'));
   grp.appendChild(grpHead);grp.appendChild(grpBody);body.appendChild(grp);
   var sec=document.createElement('div');
@@ -820,7 +849,7 @@ function renderSettings(){
   ar1.appendChild(ai);ar1.appendChild(ab);ar.appendChild(ar1);ar.appendChild(am);sec.appendChild(ar);body.appendChild(sec);
 }
 function makeSettingsSec(label,key,list,type){
-  var color=type==='emp'?EMP_COLOR:type==='off'?'#9ca3af':SUB_COLOR;
+  var color=type==='emp'?EMP_COLOR:type==='off'?OFFICE_COLOR:SUB_COLOR;
   var sec=document.createElement('div');
   if(label){var t=document.createElement('div');t.className='settings-sec-title';t.textContent=label;sec.appendChild(t);}
   var listEl=document.createElement('div');listEl.className='settings-list';listEl.style.touchAction='pan-y';
@@ -868,7 +897,7 @@ function makeSettingsSec(label,key,list,type){
           var currentName=lst[capturedIdx];
           if(!currentName)return;
           openNameEditPopup(
-            (tp==='emp'?'社員名':'協力会社名'),
+            (tp==='emp'?'社員名':tp==='off'?'社内社員名':'協力会社名'),
             currentName,
             function(n){
               if((lst||[]).indexOf(n)>=0){return '同じ名前があります';}
@@ -928,7 +957,7 @@ function makeSettingsSec(label,key,list,type){
   rebuild();
   sec.appendChild(listEl);
   var ar=document.createElement('div');ar.className='add-item-row';
-  var ai=document.createElement('input');ai.className='add-item-input';ai.placeholder=(type==='emp'?'社員名':'協力会社名')+'を入力';
+  var ai=document.createElement('input');ai.className='add-item-input';ai.placeholder=(type==='emp'?'社員名':type==='off'?'社内社員名':'協力会社名')+'を入力';
   var ab=document.createElement('button');ab.className='add-item-submit';ab.textContent='追加';
   ab.onclick=function(){
     var name=ai.value.trim();
